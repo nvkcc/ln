@@ -25,7 +25,7 @@ pub fn git_log() -> Command {
 /// content is less than that of one screen.
 pub fn less() -> Command {
     let mut less = Command::new("less");
-    less.arg("-rF").stdin(Stdio::piped());
+    less.arg("-RF").arg("--cmd=/HEAD\nkkkkkkkkkk").stdin(Stdio::piped());
     less
 }
 
