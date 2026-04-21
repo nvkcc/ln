@@ -5,8 +5,8 @@
 
 // #define DEBUG
 
-#define sp ''  // separator character
-#define SP ""  // separator string
+#define sp '' // separator character
+#define SP "" // separator string
 
 #define S(x) x, sizeof(x) - 1
 #define fwrite_literal(x) fwrite(S(x), 1, stdout);
@@ -24,10 +24,10 @@
 // Tell the compiler that x is unlikely to be true.
 #define unlikely(x) __builtin_expect(!!(x), 0)
 
-#define exit_perror(msg, action) \
-  {                              \
-    perror(msg);                 \
-    action;                      \
+#define exit_perror(msg, action)                                               \
+  {                                                                            \
+    perror(msg);                                                               \
+    action;                                                                    \
   }
 
 static inline void print_refs(char *refs) {
@@ -35,7 +35,7 @@ static inline void print_refs(char *refs) {
   for (char *x = refs; *x != sp; *(v++) = *(x++)) {
     if (strncmp(x, S("origin")) == 0) {
       x += 6, *(v++) = '*';
-    } else if (strncmp(x, S("\e[33m")) == 0) x[3] = '7';  // yellow -> gray.
+    } else if (strncmp(x, S("\e[33m")) == 0) x[3] = '7'; // yellow -> gray.
   }
   fwrite1(refs, v - refs);
 }
@@ -46,7 +46,7 @@ static inline void print_relative_date(char *v) {
   // fwrite1(date, strchr(date, sp) - date - 1);
   // return;
   char *x = strchr(v, ' ');
-  if (*(x + 1) == 'm' && *(x + 2) == 'o') *x = 'M';  // month -> M
+  if (*(x + 1) == 'm' && *(x + 2) == 'o') *x = 'M'; // month -> M
   else *x = *(x + 1);
   fwrite1(v, x - v + 1);
 }
@@ -153,62 +153,62 @@ int main(const int argc, const char **argv) {
   if (pipe(p_log)) exit_perror("Unable to start pipe.", return 1);
 
   switch (fork()) {
-    case -1:
-      exit_perror("Fork failed.", return 1);
-    case 0: {  // Child process: run `git log`.
-      const char *args[argc + 5];
-      args[0] = "git", args[1] = "log";
+  case -1:
+    exit_perror("Fork failed.", return 1);
+  case 0: { // Child process: run `git log`.
+    const char *args[argc + 5];
+    args[0] = "git", args[1] = "log";
 
-      // Copy the remaining arguments over to `args`.
-      memcpy(args + 2, argv + 1, (argc - 1) * sizeof(char *));
+    // Copy the remaining arguments over to `args`.
+    memcpy(args + 2, argv + 1, (argc - 1) * sizeof(char *));
 
-      // Core git-ln flavors.
-      args[argc + 1] = "--graph";
-      if (IS_ATTY) {
-        args[argc + 2] = "--format=" FMT_ARGS_COLORED;
-        args[argc + 3] = "--color=always";
-        args[argc + 4] = NULL;
-      } else {
-        args[argc + 2] = "--format=" FMT_ARGS________;
-        args[argc + 3] = NULL;
-      }
-
-      close(p_log[READ]);
-      dup2(p_log[WRITE], STDOUT_FILENO);
-      execvp("git", (char **)args);
+    // Core git-ln flavors.
+    args[argc + 1] = "--graph";
+    if (IS_ATTY) {
+      args[argc + 2] = "--format=" FMT_ARGS_COLORED;
+      args[argc + 3] = "--color=always";
+      args[argc + 4] = NULL;
+    } else {
+      args[argc + 2] = "--format=" FMT_ARGS________;
+      args[argc + 3] = NULL;
     }
-    default: {  // Parent process.
-      close(p_log[WRITE]);
 
-#ifdef DEBUG  // in debug mode, just print git log.
-      print_git_log(p_log[READ], IS_ATTY);
-      return 0;
+    close(p_log[READ]);
+    dup2(p_log[WRITE], STDOUT_FILENO);
+    execvp("git", (char **)args);
+  }
+  default: { // Parent process.
+    close(p_log[WRITE]);
+
+#ifdef DEBUG // in debug mode, just print git log.
+    print_git_log(p_log[READ], IS_ATTY);
+    return 0;
 #endif
 
-      if (system("which less > /dev/null 2>&1")) { /* `less` isn't installed */
+    if (system("which less > /dev/null 2>&1")) { /* `less` isn't installed */
+      print_git_log(p_log[READ], IS_ATTY);
+    } else { /* `less` is installed */
+      int p_less[2];
+      if (pipe(p_less)) exit_perror("Unable to start pipe.", return 1);
+      switch (fork()) {
+      case -1:
+        exit_perror("Fork failed.", return 1);
+      case 0: { // Child process: run the printer.
+        close(p_less[READ]);
+        dup2(p_less[WRITE], STDOUT_FILENO);
         print_git_log(p_log[READ], IS_ATTY);
-      } else { /* `less` is installed */
-        int p_less[2];
-        if (pipe(p_less)) exit_perror("Unable to start pipe.", return 1);
-        switch (fork()) {
-          case -1:
-            exit_perror("Fork failed.", return 1);
-          case 0: {  // Child process: run the printer.
-            close(p_less[READ]);
-            dup2(p_less[WRITE], STDOUT_FILENO);
-            print_git_log(p_log[READ], IS_ATTY);
-            break;
-          }
-          default: {  // Parent process. We choose to run `less` with the parent
-                      // because we want to hand back control to the TTY with
-                      // `less` in the foreground.
-            close(p_less[WRITE]);
-            dup2(p_less[READ], STDIN_FILENO);
-            execlp("less", "less", "-RF", NULL);
-          }
-        }
+        break;
       }
-      return 0;
+      default: { // Parent process. We choose to run `less` with the parent
+                 // because we want to hand back control to the TTY with
+                 // `less` in the foreground.
+        close(p_less[WRITE]);
+        dup2(p_less[READ], STDIN_FILENO);
+        execlp("less", "less", "-RF", NULL);
+      }
+      }
     }
+    return 0;
+  }
   }
 }
