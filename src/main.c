@@ -207,7 +207,7 @@ int main(const int argc, const char *argv[]) {
     /* Open fds: { gl.fd[0], pt.fd[0], pt.fd[1] }. */
 
     if (pt.pid == 0) {
-        log_trace("[%d, %d] less printer started", gl.pid, pt.pid);
+        log_trace("[%d, %d] call fdopen() in less printer", gl.pid, pt.pid);
         // Run the printer on the git log file descriptor.
         if (!(stream = fdopen(gl.fd[0], "rb"))) {
             close(gl.fd[0]);
@@ -243,6 +243,7 @@ int main(const int argc, const char *argv[]) {
         // stdout. No parsing is required here. Just reflect whatever is printed
         // above.
 
+        log_trace("[%d, %d] call fdopen() in final reflector", gl.pid, pt.pid);
         if ((stream = fdopen(pt.fd[0], "rb"))) {
             while (fgets(R_BUF, GIT_LN_BUF_SZ, stream) == R_BUF) {
                 p = memchr(R_BUF, '\n', GIT_LN_BUF_SZ);
