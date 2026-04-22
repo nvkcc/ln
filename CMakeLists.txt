@@ -13,7 +13,4 @@ set(log_level TRACE)
 
 add_executable(git-ln src/main.c src/log.c)
 
-# Create compile_commands.json for clangd to latch on to.
-file(CREATE_LINK ${CMAKE_BINARY_DIR}/compile_commands.json compile_commands.json SYMBOLIC)
-
 install(TARGETS git-ln)
