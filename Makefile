@@ -1,33 +1,23 @@
-MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
-MAKEFILE_DIR  := $(dir $(MAKEFILE_PATH))
+BUILD_DIR := target
 
-BIN_NAME := git-ln
-INSTALL_DIR := /usr/local/bin
+MAKEFILE_PATH := $(realpath $(lastword $(MAKEFILE_LIST)))
+MAKEFILE_DIR := $(dir $(MAKEFILE_PATH))
 
-PATH := $(MAKEFILE_DIR):$(PATH)
+# current: run
+current: install
 
-SUDO :=
-SUDO := sudo # disable if needed by swapping the SUDO lines.
-
-GIT_TEST_ARGS := 
-GIT_TEST_ARGS := -C ~/repos/gitnu
-GIT_TEST_ARGS := -C ~/repos/math
-GIT_TEST_ARGS := -C ~/v/cachelib/cachelib/external/glog
-
-current: test
+configure:
+	cmake -S . -B $(BUILD_DIR)
 
 build:
-	gcc main.c -o $(BIN_NAME)
+	cmake --build $(BUILD_DIR)
 
-build-release:
-	gcc -O3 main.c -o $(BIN_NAME)
+install: build
+	cmake --install $(BUILD_DIR)
 
-install: build-release
-	$(SUDO) rm -f $(INSTALL_DIR)/$(BIN_NAME)
-	$(SUDO) mv $(BIN_NAME) $(INSTALL_DIR)/$(BIN_NAME)
-
-dev: build
-	$(BIN_NAME) -n 20 --all
-
-test: build
-	git $(GIT_TEST_ARGS) ln
+run: install
+	# git -C /home/khang/repos/alatty ln --bound --all -n 10
+	# git -C /home/khang/repos/alatty ln --all
+	git -C /home/khang/repos/gitnu ln --bound --all -n 100
+	#===================================================
+	# git -C /home/khang/repos/gitnu ln --bound --all -n 100

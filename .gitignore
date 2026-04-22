@@ -1,2 +1,2 @@
-git-ln
-log
+/target/
+compile_commands.json
