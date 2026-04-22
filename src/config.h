@@ -11,7 +11,7 @@
 #define LESS "less" // Quick hack: make this invalid to debug the output.
 #define GIT "git"
 
-#define GIT_LN_BUF_SZ 512
+#define GIT_LN_BUF_SZ 2048
 
 /// When printing to the exact height of the tty window, reserve this many lines
 /// as padding for visual reasons such as to still be able to see the previous
