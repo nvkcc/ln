@@ -219,6 +219,7 @@ int main(const int argc, const char *argv[]) {
         }
         run_parse_print_loop(stream, pt.fd[1]);
         clear_and_close(gl.fd[0]);
+        fclose(stream);
         log_trace("[%d, %d] less printer loop ended", gl.pid, pt.pid);
         close(gl.fd[0]);
         close(pt.fd[0]);
@@ -248,6 +249,7 @@ int main(const int argc, const char *argv[]) {
                 write(STDOUT_FILENO, R_BUF, p - R_BUF + 1);
             }
             close(pt.fd[0]);
+            fclose(stream);
             log_trace("[%d, %d] bypass less", gl.pid, pt.pid);
             return 0;
         } else {
