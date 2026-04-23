@@ -5,7 +5,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define DEBUG_MODE
+// #define DEBUG_MODE
 
 #include "git_log_entry.h"
 #include "globals.h"
@@ -73,11 +73,26 @@ static int32_t get_row_limit() {
 }
 
 int exec_git_log(const int argc, const char *argv[]) {
-    const char *args[argc + 5];
+    const char *args[argc // [extra args]
+                     + 1  // "--no-pager"
+                     + 1  // "log"
+                     + 1  // "--graph"
+                     + 1  // "--format=..."
+                     + 1  // "--color=..."
+                     + 2  // -n ...
+                     + 1  // NULL
+    ];
     int j = 0, i;
     args[j++] = GIT;
     args[j++] = "--no-pager"; // (+1 arg)
     args[j++] = "log";        // (+1 arg)
+    char num_buf[8];
+    if (IS_ATTY && BOUNDED_ARG_IDX > 0) {
+        snprintf(num_buf, 8, "%d", get_row_limit() + 1);
+        args[j++] = "-n";
+        args[j++] = num_buf;
+        log_info("Restricted git log to %s", num_buf);
+    }
     // Copy the values of `argv` into `args`. (+(argc - 1) args)
     for (i = 1; i < argc; ++i) {
         if (i != BOUNDED_ARG_IDX) {
