@@ -72,16 +72,12 @@ static int32_t get_row_limit() {
     }
 }
 
+static const char *args[GIT_LN_MAX_ARGS];
 int exec_git_log(const int argc, const char *argv[]) {
-    const char *args[argc // [extra args]
-                     + 1  // "--no-pager"
-                     + 1  // "log"
-                     + 1  // "--graph"
-                     + 1  // "--format=..."
-                     + 1  // "--color=..."
-                     + 2  // -n ...
-                     + 1  // NULL
-    ];
+    if (argc + 10 > GIT_LN_MAX_ARGS) {
+        SEND_STDERR_LN("There's possibly too many args");
+        return 1;
+    }
     int j = 0, i;
     args[j++] = GIT;
     args[j++] = "--no-pager"; // (+1 arg)

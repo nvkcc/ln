@@ -18,4 +18,6 @@
 /// prompt.
 #define GIT_LN_SCREEN_VERTICAL_PAD 8
 
+#define GIT_LN_MAX_ARGS 64
+
 #endif
