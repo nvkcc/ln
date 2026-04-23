@@ -12,7 +12,7 @@ struct git_log_entry {
 
 #define REF_LEN(c) (c->ending_newline - c->refs)
 #define HAS_REFS(c)                                                            \
-    (IS_ATTY ? (c->refs + 3 == c->ending_newline)                              \
+    (is_atty ? (c->refs + 3 == c->ending_newline)                              \
              : (c->refs == c->ending_newline))
 
 #define sp '\002' // separator character
@@ -60,7 +60,7 @@ static inline void git_log_entry_parse(struct git_log_entry *c, char *buf,
 }
 
 static inline void git_log_entry_print(struct git_log_entry *c, char *read_buf,
-                                       char *write_buf, unsigned char IS_ATTY,
+                                       char *write_buf, unsigned char is_atty,
                                        int fd) {
     // If there is no commit SHA found, that implies that the entire line is
     // just the graph visual. So we just print the entire line.
@@ -74,7 +74,7 @@ static inline void git_log_entry_print(struct git_log_entry *c, char *read_buf,
     memcpy(ptr, src, len);                                                     \
     ptr += len;
 #define PRINT_TTY(src)                                                         \
-    if (IS_ATTY) {                                                             \
+    if (is_atty) {                                                             \
         PRINT(src, sizeof(src) - 1);                                           \
     }
     PRINT(read_buf, c->hash - read_buf - 1); // print the graph visual

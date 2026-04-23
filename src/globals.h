@@ -1,7 +1,8 @@
 /// This file should only be included once: in the main unit of translation.
 
 #include "config.h"
-#include <sys/ioctl.h>
+#include <stdint.h>
+#include <sys/ioctl.h> // for getting window size
 
 /// The main allocated stack memory for this program. Will be split into two
 /// buffers of equal size. Mainly used to clear pipes during termination.
@@ -13,9 +14,13 @@ static char *const R_BUF = BUF2;
 /// Write buffer. To buffer writes to `less` STDIN.
 static char *const W_BUF = BUF2 + GIT_LN_BUF_SZ;
 
-/// Whether or not the current session is in a tty. This determines whether or
-/// not to print color.
-static char IS_ATTY;
+enum git_ln_flag : uint8_t {
+    GIT_LN_IS_ATTY = 0b001,
+    GIT_LN_IS_BOUNDED = 0b010,
+};
+
+/// A combination of flags of git_ln_flag.
+static enum git_ln_flag GIT_LN_FLAGS = 0;
 
 /// The window size of the tty session, if it exists.
 static struct winsize WIN;
