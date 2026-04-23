@@ -3,7 +3,7 @@
 #include <string.h>
 #include <sys/wait.h>
 
-#define DEBUG_MODE
+// #define DEBUG_MODE
 
 #include "git_log_entry.h"
 #include "globals.h"
@@ -65,17 +65,13 @@ static uint32_t get_row_limit() {
     }
 }
 
+/// Checked for possible overflow at `main()` function already.
 static const char *args[GIT_LN_MAX_ARGS];
 int exec_git_log(const int argc, const char *argv[]) {
-    if (argc + 10 > GIT_LN_MAX_ARGS) {
-        write_stderr("There's possibly too many args");
-        return 1;
-    }
     int j = 0, i;
     args[j++] = GIT;
     args[j++] = "--no-pager"; // (+1 arg)
     args[j++] = "log";        // (+1 arg)
-
     if (GIT_LN_FLAGS & (GIT_LN_IS_ATTY | GIT_LN_IS_BOUNDED)) {
         uint32_t row_limit = get_row_limit();
         if (row_limit != UINT32_MAX) {
@@ -86,10 +82,11 @@ int exec_git_log(const int argc, const char *argv[]) {
         }
     }
     // Copy the values of `argv` into `args`. (+(argc - 1) args)
-    for (i = 1; i < argc; ++i) {
-        args[j++] = argv[i];
+    memcpy(&args[j], &argv[1], sizeof(char *) * (argc - 1));
+    j += argc - 1;
+    if (!(GIT_LN_FLAGS & GIT_LN_IS_BOUNDED)) {
+        args[j++] = "--graph"; // (+1 arg)
     }
-    args[j++] = "--graph"; // (+1 arg)
     if (GIT_LN_FLAGS & GIT_LN_IS_ATTY) {
         args[j++] = "--format=" GIT_LN_FMT_ARGS_1; // (+1 arg)
         args[j++] = "--color=always";              // (+1 arg)
@@ -105,11 +102,11 @@ int exec_git_log(const int argc, const char *argv[]) {
 
 #ifdef DEBUG_MODE
     log_trace("git-log running execvp (%d args)", j);
-    for (int i = 0; i < j; ++i) {
+    for (i = 0; i < j; ++i) {
         log_trace("git-log[%d] = %s", i, args[i]);
     }
 #endif
-    i = execvp(GIT, (char **)args);
+    execvp(GIT, (char **)args);
     log_trace("git-log execvp failed");
     perror("git log failed");
     return 1;
@@ -198,6 +195,11 @@ int main(const int argc, const char *argv[]) {
     log_set_quiet(1);
     gl.pid = -1, pt.pid = -1;
 #endif
+
+    if (argc + 12 > GIT_LN_MAX_ARGS) {
+        write_stderr("Too many args. CLI arg copy buffer might overflow.");
+        return 1;
+    }
 
     if (setup_tty(argc, argv)) {
         return 1;
