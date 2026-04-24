@@ -24,7 +24,3 @@ static enum git_ln_flag GIT_LN_FLAGS = 0;
 
 /// The window size of the tty session, if it exists.
 static struct winsize WIN;
-
-/// The index of `argv` of the "--bound" flag. This tells us whether or not to
-/// limit the printing of the log to the height of the current terminal window.
-static unsigned short BOUNDED_ARG_IDX = 0;
