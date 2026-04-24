@@ -3,7 +3,7 @@
 #include <string.h>
 #include <sys/wait.h>
 
-// #define DEBUG_MODE
+#define DEBUG_MODE
 
 #include "git_log_entry.h"
 #include "globals.h"
@@ -49,46 +49,26 @@ static void setup_bounded_cli_arg_idx(int argc, const char *argv[]) {
     }
 }
 
-static uint32_t get_row_limit() {
-    if ((GIT_LN_FLAGS & GIT_LN_IS_ATTY) == 0) {
-        // Not a tty -> the screen-size dependent "--bound" flag is meaningless.
-        return UINT32_MAX;
-    }
-    if (GIT_LN_FLAGS & GIT_LN_IS_BOUNDED) {
-        // "--bounded" flag is supplied.
-        return (WIN.ws_row > GIT_LN_SCREEN_VERTICAL_PAD)
-                   ? WIN.ws_row - GIT_LN_SCREEN_VERTICAL_PAD
-                   : WIN.ws_row;
-    } else {
-        // "--bounded" flag is not supplied.
-        return UINT32_MAX;
-    }
-}
-
 /// Checked for possible overflow at `main()` function already.
 static const char *args[GIT_LN_MAX_ARGS];
-int exec_git_log(const int argc, const char *argv[]) {
-    int j = 0, i;
+int exec_git_log(const int argc, const char *argv[], int max_rows) {
+    int j = 0;
     args[j++] = GIT;
     args[j++] = "-c";
-    args[j++] = "color.diff.commit=241"; // This colors the parentheses.
-    args[j++] = "--no-pager";            // (+1 arg)
-    args[j++] = "log";                   // (+1 arg)
-    if (GIT_LN_FLAGS & (GIT_LN_IS_ATTY | GIT_LN_IS_BOUNDED)) {
-        uint32_t row_limit = get_row_limit();
-        if (row_limit != UINT32_MAX) {
-            snprintf(R_BUF, 12, "%u", row_limit);
-            args[j++] = "-n";
-            args[j++] = R_BUF;
-            log_info("Restricted git log to %s", R_BUF);
-        }
+    args[j++] =
+        "color.diff.commit=241"; // This colors the parentheses around the refs.
+    args[j++] = "--no-pager";
+    args[j++] = "log";
+    if (max_rows > 0) {
+        snprintf(R_BUF, 12, "%u", max_rows);
+        args[j++] = "-n";
+        args[j++] = R_BUF;
+        log_info("Restricted git log to %s", R_BUF);
     }
-    // Copy the values of `argv` into `args`. (+(argc - 1) args)
+    // Copy the values of `argv` into `args`.
     memcpy(&args[j], &argv[1], sizeof(char *) * (argc - 1));
     j += argc - 1;
-    if (!(GIT_LN_FLAGS & GIT_LN_IS_BOUNDED)) {
-        args[j++] = "--graph"; // (+1 arg)
-    }
+    args[j++] = "--graph";
     args[j++] = "--format="
                 "%C(yellow)%h" // commit SHA
                 "%C(auto)"
@@ -107,7 +87,7 @@ int exec_git_log(const int argc, const char *argv[]) {
 
 #ifdef DEBUG_MODE
     log_trace("git-log running execvp (%d args)", j);
-    for (i = 0; i < j; ++i) {
+    for (int i = 0; i < j; ++i) {
         log_trace("git-log[%d] = %s", i, args[i]);
     }
 #endif
@@ -119,13 +99,16 @@ int exec_git_log(const int argc, const char *argv[]) {
 
 /// Reads the output of `git log` (input_stream), parses it, and sends it to
 /// `less` (output_fd).
-void run_parse_print_loop(FILE *input_stream, int output_fd) {
-    uint32_t n = get_row_limit();
-    log_trace("less printer started with limit %d", n);
+void run_parse_print_loop(FILE *input_stream, int output_fd,
+                          const int max_rows) {
+    log_trace("less printer started with limit %d", max_rows);
 
     unsigned char is_atty = (GIT_LN_FLAGS & GIT_LN_IS_ATTY) ? 1 : 0;
-    while (n-- > 0 && fgets(R_BUF, GIT_LN_BUF_SZ, input_stream) == R_BUF) {
-        git_log_entry_print(R_BUF, W_BUF, is_atty, output_fd);
+    int i = 0;
+    while (fgets(R_BUF, GIT_LN_BUF_SZ, input_stream) == R_BUF) {
+        if (max_rows == 0 || i++ < max_rows) {
+            git_log_entry_print(R_BUF, W_BUF, is_atty, output_fd);
+        }
     }
 }
 
@@ -182,13 +165,10 @@ int setup_tty(const int argc, const char *argv[]) {
 
 int main(const int argc, const char *argv[]) {
     FILE *stream;
-
     // Pipe data for `git log`.
     struct pipedata gl;
-
     // Pipe data for reading from `git log` and printing to `less`.
     struct pipedata pt;
-
     // PID for the `less` child.
     pid_t less_pid;
 
@@ -207,6 +187,7 @@ int main(const int argc, const char *argv[]) {
     if (setup_tty(argc, argv)) {
         return 1;
     }
+    int max_rows = git_log_max_count();
 
     PIPE_OR_RETURN(gl.fd) FORK_OR_RETURN(gl.pid);
     /* Open fds: { gl.fd[0], gl.fd[1] }. */
@@ -215,7 +196,7 @@ int main(const int argc, const char *argv[]) {
         dup2(gl.fd[1], STDOUT_FILENO);
         close(gl.fd[0]);
         close(gl.fd[1]);
-        return exec_git_log(argc, argv);
+        return exec_git_log(argc, argv, max_rows);
     } else {
         close(gl.fd[1]);
     }
@@ -235,7 +216,7 @@ int main(const int argc, const char *argv[]) {
             perror("fdopen failed");
             return 1;
         }
-        run_parse_print_loop(stream, pt.fd[1]);
+        run_parse_print_loop(stream, pt.fd[1], max_rows);
         clear_and_close(gl.fd[0]);
         fclose(stream);
         log_trace("[%d, %d] less printer loop ended", gl.pid, pt.pid);

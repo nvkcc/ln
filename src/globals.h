@@ -24,3 +24,25 @@ static enum git_ln_flag GIT_LN_FLAGS = 0;
 
 /// The window size of the tty session, if it exists.
 static struct winsize WIN;
+
+////////////////////////////////////////////////////////////////////////////////
+/// Derivatives from the global variables.
+////////////////////////////////////////////////////////////////////////////////
+
+/// Gets the maximum number of rows to print for `git log`. Returns 0 if there
+/// is no bound. Will be used for the "-n" (or "--max-count") flag for git log.
+static inline int git_log_max_count() {
+    if ((GIT_LN_FLAGS & GIT_LN_IS_ATTY) == 0) {
+        // Not a tty -> the screen-size dependent "--bound" flag is meaningless.
+        return 0;
+    }
+    if (GIT_LN_FLAGS & GIT_LN_IS_BOUNDED) {
+        // "--bound" flag is supplied.
+        return (WIN.ws_row > GIT_LN_SCREEN_VERTICAL_PAD)
+                   ? WIN.ws_row - GIT_LN_SCREEN_VERTICAL_PAD
+                   : WIN.ws_row;
+    } else {
+        // "--bound" flag is not supplied.
+        return 0;
+    }
+}
