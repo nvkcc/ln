@@ -5,7 +5,7 @@
 #include <sys/ioctl.h> // for getting window size
 
 /// The main allocated stack memory for this program.
-static char BUFFER[2 * GIT_LN_BUFSIZ];
+static char BUFFER[GIT_LN_BUFSIZ];
 
 enum git_ln_flag : uint8_t {
     GIT_LN_IS_ATTY = 0b001,

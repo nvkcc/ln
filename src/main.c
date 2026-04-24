@@ -138,14 +138,6 @@ void exec_less() {
     }
 }
 
-/// `fd` must be the read-end of a pipe. This function reads it until there is
-/// no more data, and then closes it.
-void clear_and_close(int fd) {
-    while (read(fd, BUFFER, sizeof(BUFFER)) > 0) {
-    }
-    close(fd);
-}
-
 // There are only two possible states after this function returns:
 // (1.) is NOT a tty.
 // (2.) is a tty, AND ioctl successfully returned.
@@ -225,7 +217,6 @@ int main(const int argc, const char *argv[]) {
             return 1;
         }
         run_parse_print_loop(stream, pt.fd[1], max_rows);
-        clear_and_close(gl.fd[0]);
         fclose(stream);
         log_trace("[%d, %d] less printer loop ended", gl.pid, pt.pid);
         close(gl.fd[0]);
@@ -262,7 +253,7 @@ int main(const int argc, const char *argv[]) {
             return 0;
         } else {
             // `fdopen` has failed. Clear the pipe.
-            clear_and_close(pt.fd[0]);
+            kill(pt.pid, SIGPIPE);
             log_trace("[%d, %d] fdopen failed", gl.pid, pt.pid);
             perror("fdopen failed");
             return 1;
@@ -270,7 +261,7 @@ int main(const int argc, const char *argv[]) {
     }
 
     waitpid(less_pid, NULL, 0);
-    clear_and_close(pt.fd[0]);
+    kill(pt.pid, SIGPIPE);
     waitpid(gl.pid, NULL, 0);
     waitpid(pt.pid, NULL, 0);
     log_trace("The end.");
