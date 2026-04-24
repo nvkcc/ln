@@ -16,7 +16,7 @@ VALGRIND_FLAGS += --log-file=$(VALGRIND_LOG)
 
 
 # current: run
-current: install
+current: run
 
 configure:
 	cmake -S . -B $(BUILD_DIR)
@@ -31,7 +31,7 @@ install: build
 run: install
 	# git -C /home/khang/repos/alatty ln --bound --all -n 10
 	# git -C /home/khang/repos/alatty ln --all
-	git -C /home/khang/repos/gitnu ln --bound --all -n 100
+	git -C /home/khang/repos/alatty ln --bound --all -n 100
 	#===================================================
 	# git -C /home/khang/repos/gitnu ln --bound --all -n 100
 

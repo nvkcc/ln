@@ -70,8 +70,10 @@ static const char *args[GIT_LN_MAX_ARGS];
 int exec_git_log(const int argc, const char *argv[]) {
     int j = 0, i;
     args[j++] = GIT;
-    args[j++] = "--no-pager"; // (+1 arg)
-    args[j++] = "log";        // (+1 arg)
+    args[j++] = "-c";
+    args[j++] = "color.diff.commit=241"; // This colors the brackets.
+    args[j++] = "--no-pager";            // (+1 arg)
+    args[j++] = "log";                   // (+1 arg)
     if (GIT_LN_FLAGS & (GIT_LN_IS_ATTY | GIT_LN_IS_BOUNDED)) {
         uint32_t row_limit = get_row_limit();
         if (row_limit != UINT32_MAX) {
@@ -87,12 +89,15 @@ int exec_git_log(const int argc, const char *argv[]) {
     if (!(GIT_LN_FLAGS & GIT_LN_IS_BOUNDED)) {
         args[j++] = "--graph"; // (+1 arg)
     }
+    args[j++] = "--format="
+                "%C(yellow)%h" // commit SHA
+                "%C(auto)"
+                "%(decorate:prefix= {,suffix=},pointer= \x1b[33m-> )" // refs
+                " %s "                       // commit subject (message)
+                "%C(240)(%C(246)%ar%C(240))" // relative author time
+        ;
     if (GIT_LN_FLAGS & GIT_LN_IS_ATTY) {
-        args[j++] = "--format=" GIT_LN_FMT_ARGS_1; // (+1 arg)
-        args[j++] = "--color=always";              // (+1 arg)
-    } else {
-        args[j++] = "--format=" GIT_LN_FMT_ARGS_0;
-        args[j++] = "--color=never";
+        args[j++] = "--color=always";
     }
     args[j++] = NULL; // (+1 arg)
 
