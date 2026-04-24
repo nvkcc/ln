@@ -71,7 +71,7 @@ int exec_git_log(const int argc, const char *argv[]) {
     int j = 0, i;
     args[j++] = GIT;
     args[j++] = "-c";
-    args[j++] = "color.diff.commit=241"; // This colors the brackets.
+    args[j++] = "color.diff.commit=241"; // This colors the parentheses.
     args[j++] = "--no-pager";            // (+1 arg)
     args[j++] = "log";                   // (+1 arg)
     if (GIT_LN_FLAGS & (GIT_LN_IS_ATTY | GIT_LN_IS_BOUNDED)) {
@@ -93,8 +93,8 @@ int exec_git_log(const int argc, const char *argv[]) {
                 "%C(yellow)%h" // commit SHA
                 "%C(auto)"
                 "%(decorate:prefix= {,suffix=},pointer= \x1b[33m-> )" // refs
-                " %s "                       // commit subject (message)
-                "%C(240)(%C(246)%ar%C(240))" // relative author time
+                " %s "                     // commit subject (message)
+                "%C(240)(%C(246)" SP "%ar" // relative author time
         ;
     if (GIT_LN_FLAGS & GIT_LN_IS_ATTY) {
         args[j++] = "--color=always";
@@ -121,13 +121,11 @@ int exec_git_log(const int argc, const char *argv[]) {
 /// `less` (output_fd).
 void run_parse_print_loop(FILE *input_stream, int output_fd) {
     uint32_t n = get_row_limit();
-    struct git_log_entry c;
     log_trace("less printer started with limit %d", n);
 
     unsigned char is_atty = (GIT_LN_FLAGS & GIT_LN_IS_ATTY) ? 1 : 0;
     while (n-- > 0 && fgets(R_BUF, GIT_LN_BUF_SZ, input_stream) == R_BUF) {
-        git_log_entry_parse(&c, R_BUF, GIT_LN_BUF_SZ);
-        git_log_entry_print(&c, R_BUF, W_BUF, is_atty, output_fd);
+        git_log_entry_print(R_BUF, W_BUF, is_atty, output_fd);
     }
 }
 

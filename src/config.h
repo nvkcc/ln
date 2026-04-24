@@ -4,8 +4,8 @@
 // Colors
 #define RESET "\e[m"
 #define YELLOW "\e[33m"
-#define DARK_GRAY "\e[38;5;240m"
-#define LIGHT_GRAY "\e[38;5;246m"
+#define DARK_GRAY "\e[240m"
+#define LIGHT_GRAY "\e[246m"
 
 // Binaries.
 #define LESS "less" // Quick hack: make this invalid to debug the output.
