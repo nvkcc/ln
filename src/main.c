@@ -3,10 +3,11 @@
 #include <string.h>
 #include <sys/wait.h>
 
-#define DEBUG_MODE
+// #define DEBUG_MODE
 
 #include "git_log_entry.h"
 #include "globals.h"
+#include "log.h"
 
 // =============================================================================
 // Macro definitions.
@@ -60,10 +61,10 @@ int exec_git_log(const int argc, const char *argv[], int max_rows) {
     args[j++] = "--no-pager";
     args[j++] = "log";
     if (max_rows > 0) {
-        snprintf(R_BUF, 12, "%u", max_rows);
+        snprintf(BUFFER, 12, "%u", max_rows);
         args[j++] = "-n";
-        args[j++] = R_BUF;
-        log_info("Restricted git log to %s", R_BUF);
+        args[j++] = BUFFER;
+        log_info("Restricted git log to %s", BUFFER);
     }
     // Copy the values of `argv` into `args`.
     memcpy(&args[j], &argv[1], sizeof(char *) * (argc - 1));
@@ -105,9 +106,9 @@ void run_parse_print_loop(FILE *input_stream, int output_fd,
 
     unsigned char is_atty = (GIT_LN_FLAGS & GIT_LN_IS_ATTY) ? 1 : 0;
     int i = 0;
-    while (fgets(R_BUF, GIT_LN_BUF_SZ, input_stream) == R_BUF) {
+    while (fgets(BUFFER, GIT_LN_BUFSIZ, input_stream) == BUFFER) {
         if (max_rows == 0 || i++ < max_rows) {
-            git_log_entry_print(R_BUF, W_BUF, is_atty, output_fd);
+            git_log_entry_print(BUFFER, is_atty, output_fd);
         }
     }
 }
@@ -116,17 +117,19 @@ void exec_less() {
     // In this if-block, both branches lead to an `execlp`. So if all goes
     // well, this is the last point of C code execution.
     if (GIT_LN_FLAGS & GIT_LN_IS_ATTY) {
-#define cmd "--cmd=/HEAD ->\n"
-        memcpy(R_BUF, S(cmd));
-        int up = WIN.ws_row / 2, adjust = 2;
+        int up = WIN_ROWS / 2, adjust = 2;
         while (up > 0 && adjust > 0) {
             up -= 1;
             adjust--;
         }
-        memset(R_BUF + sizeof(cmd) - 1, 'k', up);
+#define cmd "--cmd=/HEAD ->\n"
+        memcpy(BUFFER, cmd, sizeof(cmd) - 1);
+        memset(BUFFER + sizeof(cmd) - 1, 'k', up);
+        *(BUFFER + sizeof(cmd) - 1 + up) = '\0';
 #undef cmd
         log_trace("execlp(\"less\") with cmd, up = %d", up);
-        execlp(LESS, LESS, "-RFG", R_BUF, NULL);
+        log_trace("execlp(\"less\") with BUFFER = %s", BUFFER);
+        execlp(LESS, LESS, "-RFG", BUFFER, NULL);
     } else {
         log_trace("execlp(\"less\") with no cmd");
         execlp(LESS, LESS, "-RFG", NULL);
@@ -136,7 +139,7 @@ void exec_less() {
 /// `fd` must be the read-end of a pipe. This function reads it until there is
 /// no more data, and then closes it.
 void clear_and_close(int fd) {
-    while (read(fd, BUF2, sizeof(BUF2)) > 0) {
+    while (read(fd, BUFFER, sizeof(BUFFER)) > 0) {
     }
     close(fd);
 }
@@ -154,10 +157,14 @@ int setup_tty(const int argc, const char *argv[]) {
     setup_bounded_cli_arg_idx(argc, argv);
     if (isatty(STDOUT_FILENO)) {
         GIT_LN_FLAGS |= GIT_LN_IS_ATTY;
-        /// Compute the window size.
-        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &WIN) != 0) {
-            write_stderr("Failed to get terminal window size.");
-            return 1;
+        if (GIT_LN_FLAGS & GIT_LN_IS_BOUNDED) {
+            /// Compute the window size.
+            struct winsize w;
+            if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != 0) {
+                write_stderr("Failed to get terminal window size.");
+                return 1;
+            }
+            WIN_ROWS = w.ws_row;
         }
     }
     return 0;
@@ -244,9 +251,9 @@ int main(const int argc, const char *argv[]) {
 
         log_trace("[%d, %d] call fdopen() in final reflector", gl.pid, pt.pid);
         if ((stream = fdopen(pt.fd[0], "rb"))) {
-            while (fgets(R_BUF, GIT_LN_BUF_SZ, stream) == R_BUF) {
-                argv[0] = memchr(R_BUF, '\n', GIT_LN_BUF_SZ);
-                write(STDOUT_FILENO, R_BUF, argv[0] - R_BUF + 1);
+            while (fgets(BUFFER, GIT_LN_BUFSIZ, stream) == BUFFER) {
+                argv[0] = memchr(BUFFER, '\n', GIT_LN_BUFSIZ);
+                write(STDOUT_FILENO, BUFFER, argv[0] - BUFFER + 1);
             }
             close(pt.fd[0]);
             fclose(stream);

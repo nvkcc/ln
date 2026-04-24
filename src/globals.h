@@ -4,15 +4,8 @@
 #include <stdint.h>
 #include <sys/ioctl.h> // for getting window size
 
-/// The main allocated stack memory for this program. Will be split into two
-/// buffers of equal size. Mainly used to clear pipes during termination.
-static char BUF2[GIT_LN_BUF_SZ + GIT_LN_BUF_SZ];
-
-/// Read buffer. Where bytes from `git log` output is read to.
-static char *const R_BUF = BUF2;
-
-/// Write buffer. To buffer writes to `less` STDIN.
-static char *const W_BUF = BUF2 + GIT_LN_BUF_SZ;
+/// The main allocated stack memory for this program.
+static char BUFFER[2 * GIT_LN_BUFSIZ];
 
 enum git_ln_flag : uint8_t {
     GIT_LN_IS_ATTY = 0b001,
@@ -22,8 +15,8 @@ enum git_ln_flag : uint8_t {
 /// A combination of flags of git_ln_flag.
 static enum git_ln_flag GIT_LN_FLAGS = 0;
 
-/// The window size of the tty session, if it exists.
-static struct winsize WIN;
+/// The number of rows in the window of the tty session, if it exists.
+static unsigned short int WIN_ROWS;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Derivatives from the global variables.
@@ -38,9 +31,9 @@ static inline int git_log_max_count() {
     }
     if (GIT_LN_FLAGS & GIT_LN_IS_BOUNDED) {
         // "--bound" flag is supplied.
-        return (WIN.ws_row > GIT_LN_SCREEN_VERTICAL_PAD)
-                   ? WIN.ws_row - GIT_LN_SCREEN_VERTICAL_PAD
-                   : WIN.ws_row;
+        return (WIN_ROWS > GIT_LN_SCREEN_VERTICAL_PAD)
+                   ? WIN_ROWS - GIT_LN_SCREEN_VERTICAL_PAD
+                   : WIN_ROWS;
     } else {
         // "--bound" flag is not supplied.
         return 0;

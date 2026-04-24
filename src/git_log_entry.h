@@ -8,18 +8,18 @@
 #define sp '\002' // separator character
 #define SP "\002" // separator string
 
-static inline void git_log_entry_print(char *read_buf, char *write_buf,
-                                       unsigned char is_atty, int fd) {
+static inline void git_log_entry_print(char *line, unsigned char is_atty,
+                                       int fd) {
     char *x, *y, *newline;
-    newline = memchr(read_buf, '\n', GIT_LN_BUF_SZ);
+    newline = memchr(line, '\n', GIT_LN_BUFSIZ);
     // Look for the `sp` byte. We've set this in the --format flag for git log.
-    if ((x = memchr(read_buf, sp, newline - read_buf)) == NULL) {
-        write(fd, read_buf, newline - read_buf + 1);
+    if ((x = memchr(line, sp, newline - line)) == NULL) {
+        write(fd, line, newline - line + 1);
         return;
     }
     // Look for the first space.
     if ((y = memchr(x, ' ', newline - x)) == NULL) {
-        write(fd, read_buf, newline - read_buf + 1);
+        write(fd, line, newline - line + 1);
         return;
     }
     // Look for period labels that start with "mo" and change that to "M".
@@ -36,12 +36,12 @@ static inline void git_log_entry_print(char *read_buf, char *write_buf,
     // Print the closing parenthesis.
     if (!is_atty) {
         *x++ = ')', *x++ = '\n';
-        write(fd, read_buf, x - read_buf);
+        write(fd, line, x - line);
     } else {
         // This ANSI code comes from inspecting the git output for the opening
         // parenthesis.
         memcpy(x, "\e[38;5;240m)\n", 13);
-        write(fd, read_buf, x - read_buf + 13);
+        write(fd, line, x - line + 13);
     }
 }
 
