@@ -53,42 +53,41 @@ static void setup_bounded_cli_arg_idx(int argc, const char *argv[]) {
 /// Checked for possible overflow at `main()` function already.
 static const char *args[GIT_LN_MAX_ARGS];
 int exec_git_log(const int argc, const char *argv[], int max_rows) {
-    int j = 0;
-    args[j++] = GIT;
-    args[j++] = "-c";
-    args[j++] =
+    const char **p = args;
+    *p++ = GIT;
+    *p++ = "-c";
+    *p++ =
         "color.diff.commit=241"; // This colors the parentheses around the refs.
-    args[j++] = "--no-pager";
-    args[j++] = "log";
+    *p++ = "--no-pager";
+    *p++ = "log";
     if (max_rows > 0) {
         snprintf(BUFFER, 12, "%u", max_rows);
-        args[j++] = "-n";
-        args[j++] = BUFFER;
+        *p++ = "-n";
+        *p++ = BUFFER;
         log_info("Restricted git log to %s", BUFFER);
     }
     // Copy the values of `argv` into `args`.
-    memcpy(&args[j], &argv[1], sizeof(char *) * (argc - 1));
-    j += argc - 1;
-    args[j++] = "--graph";
-    args[j++] = "--format="
-                "%C(yellow)%h" // commit SHA
-                "%C(auto)"
-                "%(decorate:prefix= {,suffix=},pointer= \x1b[33m-> )" // refs
-                " %s "                     // commit subject (message)
-                "%C(240)(%C(246)" SP "%ar" // relative author time
+    p = mempcpy(p, &argv[1], sizeof(char *) * (argc - 1));
+    *p++ = "--graph";
+    *p++ = "--format="
+           "%C(yellow)%h" // commit SHA
+           "%C(auto)"
+           "%(decorate:prefix= {,suffix=},pointer= \x1b[33m-> )" // refs
+           " %s "                     // commit subject (message)
+           "%C(240)(%C(246)" SP "%ar" // relative author time
         ;
     if (GIT_LN_FLAGS & GIT_LN_IS_ATTY) {
-        args[j++] = "--color=always";
+        *p++ = "--color=always";
     }
-    args[j++] = NULL; // (+1 arg)
+    *p++ = NULL; // (+1 arg)
 
     // I have no idea why but if we print the next line, then no output
     // comes out of `git log` in the execvp at all. ???
     // for (i = 0; i < argc + 6; ++i) { printf("[%d] = %s\n", i, args[i]); }
 
 #ifdef DEBUG_MODE
-    log_trace("git-log running execvp (%d args)", j);
-    for (int i = 0; i < j; ++i) {
+    log_trace("git-log running execvp (%d args)", p - args);
+    for (int i = 0; i < p - args; ++i) {
         log_trace("git-log[%d] = %s", i, args[i]);
     }
 #endif
@@ -117,17 +116,20 @@ void exec_less() {
     // In this if-block, both branches lead to an `execlp`. So if all goes
     // well, this is the last point of C code execution.
     if (GIT_LN_FLAGS & GIT_LN_IS_ATTY) {
-        int up = WIN_ROWS / 2, adjust = 2;
-        while (up > 0 && adjust > 0) {
+        int up = WIN_ROWS / 2, adjust_down = 1;
+        while (up > 0 && adjust_down > 0) {
             up -= 1;
-            adjust--;
+            adjust_down--;
         }
+        char *p = BUFFER;
 #define cmd "--cmd=/HEAD ->\n"
-        memcpy(BUFFER, cmd, sizeof(cmd) - 1);
-        memset(BUFFER + sizeof(cmd) - 1, 'k', up);
-        *(BUFFER + sizeof(cmd) - 1 + up) = '\0';
+        p = mempcpy(p, cmd, sizeof(cmd) - 1);
+        p += snprintf(p, 4, "%d", up);
+        *p++ = 'k';
+        *p++ = '\0';
 #undef cmd
-        log_trace("execlp(\"less\") with cmd, up = %d", up);
+        log_trace("execlp(\"less\") with cmd, up = %d, win-rows = %d", up,
+                  WIN_ROWS);
         log_trace("execlp(\"less\") with BUFFER = %s", BUFFER);
         execlp(LESS, LESS, "-RFG", BUFFER, NULL);
     } else {
@@ -157,15 +159,14 @@ int setup_tty(const int argc, const char *argv[]) {
     setup_bounded_cli_arg_idx(argc, argv);
     if (isatty(STDOUT_FILENO)) {
         GIT_LN_FLAGS |= GIT_LN_IS_ATTY;
-        if (GIT_LN_FLAGS & GIT_LN_IS_BOUNDED) {
-            /// Compute the window size.
-            struct winsize w;
-            if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != 0) {
-                write_stderr("Failed to get terminal window size.");
-                return 1;
-            }
-            WIN_ROWS = w.ws_row;
+        /// Compute the window size whether or not the "--bound" flag is present
+        /// because we need it for to centre the search result in `less`.
+        struct winsize w;
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) != 0) {
+            write_stderr("Failed to get terminal window size.");
+            return 1;
         }
+        WIN_ROWS = w.ws_row;
     }
     return 0;
 }
