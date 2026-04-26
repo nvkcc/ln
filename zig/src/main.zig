@@ -16,7 +16,7 @@ pub fn main() !void {
     proc.stdout_behavior = .Pipe;
     try proc.spawn();
 
-    var file_reader = proc.stdout.?.reader(&.{});
+    var file_reader = proc.stdout.?.readerStreaming(&.{});
     var reader = &file_reader.interface;
 
     var buffer: [0x1000]u8 = undefined;
