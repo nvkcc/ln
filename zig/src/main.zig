@@ -1,23 +1,18 @@
 const std = @import("std");
 const ln = @import("ln");
-const l = std.os.linux;
+const linux = std.os.linux;
+const posix = std.posix;
 
-const App = struct { is_bounded: bool, is_atty: bool };
-
-fn getBoundedFlagFromCli() bool {
-    for (std.os.argv) |argv| {
-        if (std.mem.eql(u8, std.mem.span(argv), "--bound")) {
-            return true;
-        }
-    }
-    return false;
-}
+const App = @import("app.zig");
 
 pub fn main() !void {
-    const app: App = .{
-        .is_bounded = getBoundedFlagFromCli(),
-        .is_atty = std.posix.isatty(std.fs.File.stdout().handle),
-    };
+    const app: App = App.init();
+
+    std.debug.print("rows: {any}\n", .{app.maxOutputRows()});
+
+    // var wsz: std.posix.winsize = undefined;
+    // const ioctl_res = l.ioctl(l.STDOUT_FILENO, l.T.IOCGWINSZ, @intFromPtr(&wsz));
+    // if (ioctl_res == -1) {}
 
     if (app.is_atty) {
         std.debug.print("IS A TTY!", .{});
