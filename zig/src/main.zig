@@ -5,47 +5,44 @@ const posix = std.posix;
 
 const App = @import("app.zig");
 
+/// Args for `git log`.
+const argv_gl: [4][]const u8 = .{ "git", "log", "--graph", "--oneline" };
+
+/// Args for `less`.
+const argv_ls: [3][]const u8 = .{ "less", "-RFG", "--cmd=/HEAD\n" };
+
 pub fn main() !void {
     const app: App = App.init();
+    _ = app;
+
     var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    std.debug.print("rows: {any}\n", .{app.maxOutputRows()});
-    const git_log_argv: [4][]const u8 = .{ "git", "log", "--graph", "--oneline" };
-    var proc = std.process.Child.init(&git_log_argv, gpa.allocator());
-    proc.stdout_behavior = .Pipe;
-    try proc.spawn();
+    // Child process for `git log`.
+    var proc_gl = std.process.Child.init(&argv_gl, gpa.allocator());
+    proc_gl.stdout_behavior = .Pipe;
+    try proc_gl.spawn();
+
+    var proc_ls = std.process.Child.init(&argv_ls, gpa.allocator());
+    proc_ls.stdin_behavior = .Inherit;
+    const err_ls = proc_ls.spawn();
 
     var buffer: [0x800]u8 = undefined;
 
-    var file_reader = proc.stdout.?.readerStreaming(&buffer);
+    var file_reader = proc_gl.stdout.?.readerStreaming(&buffer);
     var reader = &file_reader.interface;
 
     while (true) {
-        const line: []u8 = try reader.takeDelimiter('\n') orelse return;
-        // reader.takeDelimiter('\n');
-        // const len = try reader.readSliceShort(&buffer);
-        // if (len == 0) break;
+        const line: []u8 = try reader.takeDelimiter('\n') orelse break;
         std.debug.print("Chunk: {s}\n", .{line});
     }
-    // var reader = f_reader.interface;
-    // while (true) {
-    //     const len = try reader.readSliceShort(&chunk);
-    //     if (len == 0) break;
-    //     std.debug.print("Chunk: {s}\n", .{chunk[0..len]});
-    // }
 
-    const term = try proc.wait();
-    try std.testing.expectEqual(term, std.process.Child.Term{ .Exited = 0 });
-    // child.spawn();
+    _ = try proc_gl.wait();
 
-    // var wsz: std.posix.winsize = undefined;
-    // const ioctl_res = l.ioctl(l.STDOUT_FILENO, l.T.IOCGWINSZ, @intFromPtr(&wsz));
-    // if (ioctl_res == -1) {}
+    var proc_ls = std.process.Child.init(&argv_ls, gpa.allocator());
+    _ = try proc_ls.wait();
 
-    if (app.is_atty) {
-        std.debug.print("IS A TTY!\n", .{});
-    } else {
-        std.debug.print("IS NOT TTY!\n", .{});
-    }
+    std.debug.print("The end.\n", .{});
 }
+
+// try std.testing.expectEqual(term_less, std.process.Child.Term{ .Exited = 0 });
