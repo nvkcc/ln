@@ -8,6 +8,7 @@ const App = @import("app.zig");
 pub fn main() !void {
     const app: App = App.init();
     var gpa = std.heap.DebugAllocator(.{}){};
+    defer _ = gpa.deinit();
 
     std.debug.print("rows: {any}\n", .{app.maxOutputRows()});
     const git_log_argv: [4][]const u8 = .{ "git", "log", "--graph", "--oneline" };
@@ -15,7 +16,16 @@ pub fn main() !void {
     proc.stdout_behavior = .Pipe;
     try proc.spawn();
 
-    // var f_reader = proc.stdout.?.reader(&buffer);
+    var file_reader = proc.stdout.?.reader(&.{});
+    var reader = &file_reader.interface;
+
+    var buffer: [0x1000]u8 = undefined;
+
+    while (true) {
+        const len = try reader.readSliceShort(&buffer);
+        if (len == 0) break;
+        std.debug.print("Chunk: {s}\n", .{buffer[0..len]});
+    }
     // var reader = f_reader.interface;
     // while (true) {
     //     const len = try reader.readSliceShort(&chunk);
