@@ -16,15 +16,17 @@ pub fn main() !void {
     proc.stdout_behavior = .Pipe;
     try proc.spawn();
 
-    var file_reader = proc.stdout.?.readerStreaming(&.{});
+    var buffer: [0x800]u8 = undefined;
+
+    var file_reader = proc.stdout.?.readerStreaming(&buffer);
     var reader = &file_reader.interface;
 
-    var buffer: [0x1000]u8 = undefined;
-
     while (true) {
-        const len = try reader.readSliceShort(&buffer);
-        if (len == 0) break;
-        std.debug.print("Chunk: {s}\n", .{buffer[0..len]});
+        const line: []u8 = try reader.takeDelimiter('\n') orelse return;
+        // reader.takeDelimiter('\n');
+        // const len = try reader.readSliceShort(&buffer);
+        // if (len == 0) break;
+        std.debug.print("Chunk: {s}\n", .{line});
     }
     // var reader = f_reader.interface;
     // while (true) {
