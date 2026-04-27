@@ -1,5 +1,6 @@
 const std = @import("std");
 const ln = @import("ln");
+const mem = std.mem;
 const linux = std.os.linux;
 const posix = std.posix;
 
@@ -13,42 +14,10 @@ const App = @import("app.zig");
 /// Args for `less`.
 const argv_ls: [3][]const u8 = .{ "less", "-RFG", "--cmd=/HEAD\n" };
 
-fn git_log_args() [64][]const u8 {
-    var buf: [64][]const u8 = undefined;
-    buf[0] = "git";
-    buf[1] = "-c";
-    return buf;
-}
-
-pub fn main() !void {
-    const app: App = App.init();
-
-    var gpa = std.heap.DebugAllocator(.{}){};
-    var fbuffer: [0x800]u8 = undefined;
-    var fba: std.heap.FixedBufferAllocator = .init(&fbuffer);
-    defer _ = gpa.deinit();
-
-    // Child process for `git log`.
-    // var proc_gl = std.process.Child.init(&argv_gl, gpa.allocator());
-    // proc_gl.stdout_behavior = .Pipe;
-    // try proc_gl.spawn();
-
-    var proc_ls = std.process.Child.init(&argv_ls, gpa.allocator());
-    proc_ls.stdin_behavior = .Inherit;
-    try proc_ls.spawn();
-
-    proc_ls.waitForSpawn() catch |err| switch (err) {
-        std.process.Child.SpawnError.FileNotFound => {
-            std.debug.print("`less` is not installed.\n", .{});
-            // TODO: spawn git log here.
-            // try proc_gl.spawn();
-            return;
-        },
-        else => return err,
-    };
-
-    var argv_gl: std.ArrayList([]const u8) = try .initCapacity(fba.allocator(), 16);
-    try argv_gl.appendSlice(fba.allocator(), &[_][]const u8{
+/// Gathers the CLI arguments to send to `git-log`.
+fn git_log_args(app: *const App, allocator: mem.Allocator) ![][]const u8 {
+    var argv_gl: std.ArrayList([]const u8) = try .initCapacity(allocator, 16);
+    try argv_gl.appendSlice(allocator, &[_][]const u8{
         // git options.
         "git",
         "-c",
@@ -57,34 +26,61 @@ pub fn main() !void {
         // git-log options.
         "log",
     });
-    const git_log_n_val_buf = try fba.allocator().alloc(u8, 16);
+    const git_log_n_val_buf = try allocator.alloc(u8, 16);
     if (app.maxOutputRows()) |rows| {
-        try argv_gl.append(fba.allocator(), "-n");
+        try argv_gl.append(allocator, "-n");
         const n = try std.fmt.bufPrint(git_log_n_val_buf, "{d}", .{rows});
-        try argv_gl.append(fba.allocator(), n);
+        try argv_gl.append(allocator, n);
     }
 
     for (std.os.argv[1..]) |argv_z| {
         const argv: []const u8 = std.mem.span(argv_z);
         std.log.debug("argv: {s}", .{argv});
         if (!std.mem.eql(u8, argv, "--bound")) {
-            try argv_gl.append(fba.allocator(), argv);
+            try argv_gl.append(allocator, argv);
         }
     }
-    try argv_gl.append(fba.allocator(), "--graph");
-    try argv_gl.append(fba.allocator(), "--format=" //
+    try argv_gl.append(allocator, "--graph");
+    try argv_gl.append(allocator, "--format=" //
         ++ "%C(yellow)%h" // commit SHA
         ++ "%C(auto)" //
         ++ "%(decorate:prefix= {,suffix=},pointer= \x1b[33m-> )" // refs
         ++ " %s " // commit subject (message)
         ++ "%C(240)(%C(246)\x02%ar"); // relative author time
 
-    for (0..argv_gl.items.len) |i| {
-        // std.debug.print("* [{d}] = {s}\n", .{ i, argv_gl.items[i] });
-        std.log.info("* [{d}] = {s}\x1b[m", .{ i, argv_gl.items[i] });
+    return argv_gl.items;
+}
+
+pub fn main() !void {
+    const app: App = App.init();
+
+    var fbuffer: [0x1000]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&fbuffer);
+    var gpa = std.heap.DebugAllocator(.{}){};
+    defer _ = gpa.deinit();
+
+    const argv_gl = try git_log_args(&app, fba.allocator());
+    for (0..argv_gl.len) |i| {
+        std.log.info("* [{d}] = {s}\x1b[m", .{ i, argv_gl[i] });
     }
 
-    var proc_gl = std.process.Child.init(argv_gl.items, gpa.allocator());
+    // Spawn `less` first to see if it exists.
+    var proc_ls = std.process.Child.init(&argv_ls, fba.allocator());
+    proc_ls.stdin_behavior = .Inherit;
+    try proc_ls.spawn();
+
+    // If `less` is not installed, then just run a full bypass to git log.
+    proc_ls.waitForSpawn() catch |err| switch (err) {
+        std.process.Child.SpawnError.FileNotFound => {
+            std.log.warn("`less` is not installed.\n", .{});
+            var proc_gl = std.process.Child.init(argv_gl, fba.allocator());
+            try proc_gl.spawn();
+            return;
+        },
+        else => return err,
+    };
+
+    var proc_gl = std.process.Child.init(argv_gl, fba.allocator());
     try proc_gl.spawn();
 
     // try argv_gl.append(fba.allocator(), "git");
