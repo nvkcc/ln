@@ -3,13 +3,15 @@ const ln = @import("ln");
 const linux = std.os.linux;
 const posix = std.posix;
 
+pub const std_options: std.Options = .{
+    .log_level = .debug,
+    .logFn = @import("logger.zig").customLog,
+};
+
 const App = @import("app.zig");
 
-/// Args for `git log`.
-// const argv_gl: [4][]const u8 = .{ "git", "log", "--graph", "--oneline" };
-
 /// Args for `less`.
-const argv_ls: [3][]const u8 = .{ "lalsdfjkes", "-RFG", "--cmd=/HEAD\n" };
+const argv_ls: [3][]const u8 = .{ "less", "-RFG", "--cmd=/HEAD\n" };
 
 fn git_log_args() [64][]const u8 {
     var buf: [64][]const u8 = undefined;
@@ -44,10 +46,9 @@ pub fn main() !void {
         },
         else => return err,
     };
-    std.debug.print("GOT HERE\n", .{});
 
-    // var argv_gl: std.ArrayList([]const u8) = [_][]u8{};
-    var argv_gl_init = [5][]const u8{
+    var argv_gl: std.ArrayList([]const u8) = try .initCapacity(fba.allocator(), 16);
+    try argv_gl.appendSlice(fba.allocator(), &[_][]const u8{
         // git options.
         "git",
         "-c",
@@ -55,12 +56,37 @@ pub fn main() !void {
         "--no-pager",
         // git-log options.
         "log",
-    };
-    var argv_gl: std.ArrayList([]const u8) = .fromOwnedSlice(argv_gl_init[0..]);
-    if (app.maxOutputRows()) |_| {
+    });
+    const git_log_n_val_buf = try fba.allocator().alloc(u8, 16);
+    if (app.maxOutputRows()) |rows| {
         try argv_gl.append(fba.allocator(), "-n");
-        try argv_gl.append(fba.allocator(), "10000");
+        const n = try std.fmt.bufPrint(git_log_n_val_buf, "{d}", .{rows});
+        try argv_gl.append(fba.allocator(), n);
     }
+
+    for (std.os.argv[1..]) |argv_z| {
+        const argv: []const u8 = std.mem.span(argv_z);
+        std.log.debug("argv: {s}", .{argv});
+        if (!std.mem.eql(u8, argv, "--bound")) {
+            try argv_gl.append(fba.allocator(), argv);
+        }
+    }
+    try argv_gl.append(fba.allocator(), "--graph");
+    try argv_gl.append(fba.allocator(), "--format=" //
+        ++ "%C(yellow)%h" // commit SHA
+        ++ "%C(auto)" //
+        ++ "%(decorate:prefix= {,suffix=},pointer= \x1b[33m-> )" // refs
+        ++ " %s " // commit subject (message)
+        ++ "%C(240)(%C(246)\x02%ar"); // relative author time
+
+    for (0..argv_gl.items.len) |i| {
+        // std.debug.print("* [{d}] = {s}\n", .{ i, argv_gl.items[i] });
+        std.log.info("* [{d}] = {s}\x1b[m", .{ i, argv_gl.items[i] });
+    }
+
+    var proc_gl = std.process.Child.init(argv_gl.items, gpa.allocator());
+    try proc_gl.spawn();
+
     // try argv_gl.append(fba.allocator(), "git");
     // var j = 0;
     // var argv_gl2: [64][]const u8 = undefined;
