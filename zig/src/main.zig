@@ -64,7 +64,7 @@ pub fn main_inner() !u8 {
         };
         // Look for the separator character. If none is found, then skip parsing
         // and just print the line to stdout.
-        const n = mem.indexOfScalar(u8, line, 2) orelse {
+        const n = mem.lastIndexOfScalar(u8, line, '\x02') orelse {
             _ = try output.interface.write(line);
             continue;
         };
