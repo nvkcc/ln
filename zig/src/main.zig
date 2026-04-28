@@ -12,7 +12,10 @@ pub const std_options: std.Options = .{
 const App = @import("app.zig");
 
 /// Args for `less`.
-const argv_ls: [3][]const u8 = .{ "less", "-RFG", "--cmd=/HEAD\n" };
+const argv_ls: [2][]const u8 = .{
+    "less",
+    "-RFG",
+};
 
 /// Gathers the CLI arguments to send to `git-log`.
 fn git_log_args(
@@ -87,6 +90,11 @@ pub fn main() !void {
         else => return err,
     };
 
+    // This should be safe because we already set the stdin_behavior above.
+    const proc_ls_stdin = proc_ls.stdin orelse unreachable;
+
+    try posix.dup2(proc_ls_stdin.handle, std.fs.File.stdin().handle);
+
     var proc_gl = std.process.Child.init(argv_gl, fba.allocator());
     proc_gl.stdout_behavior = .Pipe;
     try proc_gl.spawn();
@@ -96,7 +104,7 @@ pub fn main() !void {
     var f_reader = proc_gl.stdout.?.readerStreaming(read_buf);
     var reader = &f_reader.interface;
     // var stdout = std.fs.File.stdout().writer(write_buf);
-    var stdout = proc_ls.stdin.?.writer(write_buf);
+    var stdout = proc_ls_stdin.writer(write_buf);
     loop: while (true) {
         var line = reader.takeDelimiterInclusive('\n') catch |e| switch (e) {
             error.EndOfStream => break :loop,

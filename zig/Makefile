@@ -7,4 +7,4 @@ install:
 	zig build --prefix /usr/local install
 
 run: install
-	git -C /home/khang/repos/alatty ln --bound --all -n 30
+	git -C /home/khang/repos/alatty ln --bound --all -n 300
