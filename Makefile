@@ -16,7 +16,10 @@ VALGRIND_FLAGS += --log-file=$(VALGRIND_LOG)
 
 
 # current: run
-current: run
+current: install-zig
+
+install-zig:
+	zig cc -o /usr/local/bin/git-ln -O3 src/main.c
 
 configure:
 	cmake -S . -B $(BUILD_DIR)
