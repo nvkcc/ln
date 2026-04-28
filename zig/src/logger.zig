@@ -24,3 +24,17 @@ pub fn customLog(
     };
     nosuspend stderr.print(color ++ level_txt ++ "\x1b[m" ++ prefix2 ++ format ++ "\n", args) catch return;
 }
+
+fn num_digits(n: u16) usize {
+    return std.math.log10(n) + 1;
+}
+
+test "num_digits" {
+    try std.testing.expectEqual(num_digits(1), 1);
+    try std.testing.expectEqual(num_digits(9), 1);
+    try std.testing.expectEqual(num_digits(10), 2);
+    try std.testing.expectEqual(num_digits(99), 2);
+    try std.testing.expectEqual(num_digits(100), 3);
+    try std.testing.expectEqual(num_digits(999), 3);
+    try std.testing.expectEqual(num_digits(1000), 4);
+}

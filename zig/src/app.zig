@@ -1,6 +1,7 @@
 const Self = @This();
 
 const std = @import("std");
+const mem = std.mem;
 const linux = std.os.linux;
 const posix = std.posix;
 
@@ -57,4 +58,67 @@ pub fn maxOutputRows(app: *const Self) ?u16 {
         // "--bound" flag is not supplied.
         return null;
     }
+}
+
+/// Gets the CLI arguments to send to `less`.
+pub fn less_args(
+    self: *const Self,
+    allocator: mem.Allocator,
+) error{ OutOfMemory, NoSpaceLeft }![][]const u8 {
+    var args: std.ArrayList([]const u8) = try .initCapacity(allocator, 3);
+    args.appendSliceAssumeCapacity(&[_][]const u8{ "less", "-RFG" });
+
+    var num_buf: ?[]u8 = null;
+    if (self.win_rows) |rows| {
+        const half = rows / 2;
+        const n = half - @min(half, 1);
+        num_buf = try allocator.alloc(u8, std.math.log10(n) + 1 + 13 + 10);
+        const num_str = try std.fmt.bufPrint(num_buf.?, "--cmd=/HEAD\n{d}k", .{n});
+        try args.append(allocator, num_str);
+    }
+
+    return args.items;
+}
+
+/// Gets the CLI arguments to send to `git-log`.
+pub fn git_log_args(
+    self: *const Self,
+    allocator: mem.Allocator,
+) error{ OutOfMemory, NoSpaceLeft }![][]const u8 {
+    var args: std.ArrayList([]const u8) = try .initCapacity(allocator, 16);
+    args.appendSliceAssumeCapacity(&[_][]const u8{
+        // git options.
+        "git",
+        "-c",
+        "color.diff.commit=241", // This colors the parentheses around the refs.
+        "--no-pager",
+        // git-log options.
+        "log",
+    });
+    var num_buf: ?[]u8 = null;
+    if (self.maxOutputRows()) |rows| {
+        try args.append(allocator, "-n");
+        num_buf = try allocator.alloc(u8, std.math.log10(rows) + 1);
+        const num_str = try std.fmt.bufPrint(num_buf.?, "{d}", .{rows});
+        try args.append(allocator, num_str);
+    }
+
+    for (std.os.argv[1..]) |argv_z| {
+        const argv: []const u8 = mem.span(argv_z);
+        if (!mem.eql(u8, argv, "--bound")) {
+            try args.append(allocator, argv);
+        }
+    }
+    try args.append(allocator, "--graph");
+    try args.append(allocator, "--format=" //
+        ++ "%C(yellow)%h" // commit SHA
+        ++ "%C(auto)" //
+        ++ "%(decorate:prefix= {,suffix=},pointer= \x1b[33m-> )" // refs
+        ++ " %s " // commit subject (message)
+        ++ "%C(240)(%C(246)\x02%ar%C(240))%C(reset)" // relative author time
+    );
+    if (self.is_atty) {
+        try args.append(allocator, "--color=always");
+    }
+    return args.items;
 }

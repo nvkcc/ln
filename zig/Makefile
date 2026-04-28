@@ -8,3 +8,6 @@ install:
 
 run: install
 	git -C /home/khang/repos/alatty ln --bound --all -n 300
+
+test:
+	zig build test
