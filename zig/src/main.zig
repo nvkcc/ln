@@ -14,10 +14,15 @@ const App = @import("app.zig");
 /// Args for `less`.
 const argv_ls: [3][]const u8 = .{ "less", "-RFG", "--cmd=/HEAD\n" };
 
-/// Gathers the CLI arguments to send to `git-log`.
-fn git_log_args(app: *const App, allocator: mem.Allocator) ![][]const u8 {
+/// Gathers the CLI arguments to send to `git-log`. Amazingly, somehow zig
+/// manages to pass on the "is-a-tty"-ness to the child process, so we don't
+/// need to pass the "--color=always" option.
+fn git_log_args(
+    allocator: mem.Allocator,
+    app: *const App,
+) error{ OutOfMemory, NoSpaceLeft }![][]const u8 {
     var argv_gl: std.ArrayList([]const u8) = try .initCapacity(allocator, 16);
-    try argv_gl.appendSlice(allocator, &[_][]const u8{
+    argv_gl.appendSliceAssumeCapacity(&[_][]const u8{
         // git options.
         "git",
         "-c",
@@ -59,7 +64,7 @@ pub fn main() !void {
     var gpa = std.heap.DebugAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    const argv_gl = try git_log_args(&app, fba.allocator());
+    const argv_gl = try git_log_args(fba.allocator(), &app);
     for (0..argv_gl.len) |i| {
         std.log.info("* [{d}] = {s}\x1b[m", .{ i, argv_gl[i] });
     }
