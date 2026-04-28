@@ -14,9 +14,7 @@ const App = @import("app.zig");
 /// Args for `less`.
 const argv_ls: [3][]const u8 = .{ "less", "-RFG", "--cmd=/HEAD\n" };
 
-/// Gathers the CLI arguments to send to `git-log`. Amazingly, somehow zig
-/// manages to pass on the "is-a-tty"-ness to the child process, so we don't
-/// need to pass the "--color=always" option.
+/// Gathers the CLI arguments to send to `git-log`.
 fn git_log_args(
     allocator: mem.Allocator,
     app: *const App,
@@ -39,9 +37,9 @@ fn git_log_args(
     }
 
     for (std.os.argv[1..]) |argv_z| {
-        const argv: []const u8 = std.mem.span(argv_z);
+        const argv: []const u8 = mem.span(argv_z);
         std.log.debug("argv: {s}", .{argv});
-        if (!std.mem.eql(u8, argv, "--bound")) {
+        if (!mem.eql(u8, argv, "--bound")) {
             try argv_gl.append(allocator, argv);
         }
     }
@@ -51,7 +49,11 @@ fn git_log_args(
         ++ "%C(auto)" //
         ++ "%(decorate:prefix= {,suffix=},pointer= \x1b[33m-> )" // refs
         ++ " %s " // commit subject (message)
-        ++ "%C(240)(%C(246)\x02%ar"); // relative author time
+        ++ "%C(240)(%C(246)\x02%ar%C(240))%C(reset)" // relative author time
+    );
+    if (app.is_atty) {
+        try argv_gl.append(allocator, "--color=always");
+    }
 
     return argv_gl.items;
 }
@@ -71,7 +73,7 @@ pub fn main() !void {
 
     // Spawn `less` first to see if it exists.
     var proc_ls = std.process.Child.init(&argv_ls, fba.allocator());
-    proc_ls.stdin_behavior = .Inherit;
+    proc_ls.stdin_behavior = .Pipe;
     try proc_ls.spawn();
 
     // If `less` is not installed, then just run a full bypass to git log.
@@ -86,50 +88,45 @@ pub fn main() !void {
     };
 
     var proc_gl = std.process.Child.init(argv_gl, fba.allocator());
+    proc_gl.stdout_behavior = .Pipe;
     try proc_gl.spawn();
 
-    // try argv_gl.append(fba.allocator(), "git");
-    // var j = 0;
-    // var argv_gl2: [64][]const u8 = undefined;
-    // argv_gl2[j] = "git";
-    // j += 1;
-    // //     // git options.
-    // //     "git",
-    // //     "-c",
-    // //     "color.diff.commit=241", // This colors the parentheses around the refs.
-    // //     "--no-pager",
-    // //     // git-log options.
-    // //     "log",
-    // // };
-    // for (0..64) |i| {
-    //     std.debug.print("{d} = {s}\n", .{ i, argv_gl2[i] });
-    // }
-    // argv_gl2[0] = "git";
-    // argv_gl2[1] = "-c";
+    const read_buf = try fba.allocator().alloc(u8, 0x400);
+    const write_buf = try fba.allocator().alloc(u8, 0x400);
+    var f_reader = proc_gl.stdout.?.readerStreaming(read_buf);
+    var reader = &f_reader.interface;
+    // var stdout = std.fs.File.stdout().writer(write_buf);
+    var stdout = proc_ls.stdin.?.writer(write_buf);
+    loop: while (true) {
+        var line = reader.takeDelimiterInclusive('\n') catch |e| switch (e) {
+            error.EndOfStream => break :loop,
+            else => return e,
+        };
+        // Look for the separator character. If none is found, then skip parsing
+        // and just print the line to stdout.
+        const n = mem.indexOfScalar(u8, line, 2) orelse {
+            _ = try stdout.interface.write(line);
+            continue;
+        };
+        // Unreachable because we expect `git` to at least have one space
+        // character after the separator, since we use %ar, which prints
+        // something like "3 days ago".
+        const m = (mem.indexOfScalar(u8, line[n..], ' ') orelse unreachable) + n;
+        if (line[m + 1] == 'm' and line[m + 2] == 'o') {
+            line[m] = 'M';
+        } else {
+            line[m] = line[m + 1];
+        }
+        @memmove(line[n..m], line[n + 1 .. m + 1]);
 
-    // var buffer: [0x800]u8 = undefined;
-    // var f_reader = proc_gl.stdout.?.readerStreaming(&buffer);
-    // var reader = &f_reader.interface;
-    // while (true) {
-    //     const line: []u8 = try reader.takeDelimiter('\n') orelse break;
-    //     std.debug.print("Chunk: {s}\n", .{line});
-    // }
-
-    // var buffer: [0x800]u8 = undefined;
-    //
-    // var file_reader = proc_gl.stdout.?.readerStreaming(&buffer);
-    // var reader = &file_reader.interface;
-    //
-    // while (true) {
-    //     const line: []u8 = try reader.takeDelimiter('\n') orelse break;
-    //     std.debug.print("Chunk: {s}\n", .{line});
-    // }
-    //
-    // _ = try proc_gl.wait();
-    //
-    // _ = try proc_ls.wait();
-    //
-    // std.debug.print("The end.\n", .{});
+        const j = j: {
+            const t: u8 = if (app.is_atty) '\x1b' else ')';
+            break :j (mem.indexOfScalar(u8, line[m..], t) orelse unreachable) + m;
+        };
+        @memmove(line[m .. m + line.len - j], line[j..]);
+        line = line[0 .. m + line.len - j];
+        _ = try stdout.interface.write(line);
+    }
 }
 
 // try std.testing.expectEqual(term_less, std.process.Child.Term{ .Exited = 0 });
