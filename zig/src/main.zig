@@ -5,7 +5,7 @@ const linux = std.os.linux;
 const posix = std.posix;
 
 pub const std_options: std.Options = .{
-    .log_level = .debug,
+    .log_level = .err,
     .logFn = @import("logger.zig").customLog,
 };
 
@@ -61,13 +61,11 @@ fn git_log_args(
     return argv_gl.items;
 }
 
-pub fn main() !void {
+pub fn main_inner() !u8 {
     const app: App = App.init();
 
     var fbuffer: [0x1000]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&fbuffer);
-    var gpa = std.heap.DebugAllocator(.{}){};
-    defer _ = gpa.deinit();
 
     const argv_gl = try git_log_args(fba.allocator(), &app);
     for (0..argv_gl.len) |i| {
@@ -79,32 +77,33 @@ pub fn main() !void {
     proc_ls.stdin_behavior = .Pipe;
     try proc_ls.spawn();
 
+    // Prepare the `git log` child process, but don't spawn yet. Whether or not
+    // we pipe it depends on if `less` went well.
+    var proc_gl = std.process.Child.init(argv_gl, fba.allocator());
+
     // If `less` is not installed, then just run a full bypass to git log.
     proc_ls.waitForSpawn() catch |err| switch (err) {
-        std.process.Child.SpawnError.FileNotFound => {
+        error.FileNotFound => {
             std.log.warn("`less` is not installed.\n", .{});
-            var proc_gl = std.process.Child.init(argv_gl, fba.allocator());
             try proc_gl.spawn();
-            return;
+            const term = try proc_gl.wait();
+            return term.Exited;
         },
         else => return err,
     };
 
-    // This should be safe because we already set the stdin_behavior above.
-    const proc_ls_stdin = proc_ls.stdin orelse unreachable;
-
-    try posix.dup2(proc_ls_stdin.handle, std.fs.File.stdin().handle);
-
-    var proc_gl = std.process.Child.init(argv_gl, fba.allocator());
     proc_gl.stdout_behavior = .Pipe;
     try proc_gl.spawn();
 
+    // This should be safe because we already set the stdin_behavior above.
+    const proc_ls_stdin = proc_ls.stdin orelse unreachable;
+    proc_ls.stdin = null; // Move the value out, a la Rust's Option::take.
+
     const read_buf = try fba.allocator().alloc(u8, 0x400);
     const write_buf = try fba.allocator().alloc(u8, 0x400);
-    var f_reader = proc_gl.stdout.?.readerStreaming(read_buf);
+    var f_reader = proc_gl.stdout.?.reader(read_buf);
     var reader = &f_reader.interface;
-    // var stdout = std.fs.File.stdout().writer(write_buf);
-    var stdout = proc_ls_stdin.writer(write_buf);
+    var output = proc_ls_stdin.writer(write_buf);
     loop: while (true) {
         var line = reader.takeDelimiterInclusive('\n') catch |e| switch (e) {
             error.EndOfStream => break :loop,
@@ -113,7 +112,7 @@ pub fn main() !void {
         // Look for the separator character. If none is found, then skip parsing
         // and just print the line to stdout.
         const n = mem.indexOfScalar(u8, line, 2) orelse {
-            _ = try stdout.interface.write(line);
+            _ = try output.interface.write(line);
             continue;
         };
         // Unreachable because we expect `git` to at least have one space
@@ -127,14 +126,23 @@ pub fn main() !void {
         }
         @memmove(line[n..m], line[n + 1 .. m + 1]);
 
-        const j = j: {
-            const t: u8 = if (app.is_atty) '\x1b' else ')';
-            break :j (mem.indexOfScalar(u8, line[m..], t) orelse unreachable) + m;
-        };
+        const j = (mem.indexOfScalar(
+            u8,
+            line[m..],
+            if (app.is_atty) '\x1b' else ')',
+        ) orelse unreachable) + m;
         @memmove(line[m .. m + line.len - j], line[j..]);
         line = line[0 .. m + line.len - j];
-        _ = try stdout.interface.write(line);
+        _ = try output.interface.write(line);
     }
+    proc_ls_stdin.close();
+    _ = try proc_ls.wait();
+    const term = try proc_gl.wait();
+    return term.Exited;
+}
+
+pub fn main() !void {
+    _ = try main_inner();
 }
 
 // try std.testing.expectEqual(term_less, std.process.Child.Term{ .Exited = 0 });
