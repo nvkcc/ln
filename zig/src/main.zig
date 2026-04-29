@@ -12,10 +12,15 @@ pub const std_options: std.Options = .{
 };
 
 pub fn main_inner() !u8 {
+    std.log.info("Start execution", .{});
     const app: App = App.init();
 
     const argv_gl = try app.git_log_args(allocator);
-    // for (0..argv_gl.len) |i| { std.log.info("[{d}] = {s}\x1b[m", .{ i, argv_gl[i] }); }
+    if (comptime std.options.log_level == .debug) {
+        for (0..argv_gl.len) |i| {
+            std.log.debug("[{d}] = {s}\x1b[m", .{ i, argv_gl[i] });
+        }
+    }
 
     // If we're not even in a TTY, then don't bother with a pager.
     if (!app.is_atty) {
@@ -29,6 +34,8 @@ pub fn main_inner() !u8 {
     var proc_ls = std.process.Child.init(argv_ls, allocator);
     proc_ls.stdin_behavior = .Pipe;
     try proc_ls.spawn();
+
+    std.log.info("Just spawned less.", .{});
 
     // Prepare the `git log` child process, but don't spawn yet. Whether or not
     // we pipe it depends on if `less` went well.
@@ -44,6 +51,7 @@ pub fn main_inner() !u8 {
         },
         else => return err,
     };
+    std.log.info("Less spawned okay.", .{});
 
     proc_gl.stdout_behavior = .Pipe;
     try proc_gl.spawn();
@@ -57,11 +65,13 @@ pub fn main_inner() !u8 {
     var f_reader = proc_gl.stdout.?.reader(read_buf);
     var reader = &f_reader.interface;
     var output = proc_ls_stdin.writer(write_buf);
+    std.log.info("Starting log loop.", .{});
     loop: while (true) {
         var line = reader.takeDelimiterInclusive('\n') catch |e| switch (e) {
             error.EndOfStream => break :loop,
             else => return e,
         };
+        std.log.info("line: {s}", .{line[0..mem.indexOfScalar(u8, line, '\n').?]});
         // Look for the separator character. If none is found, then skip parsing
         // and just print the line to stdout.
         const n = mem.lastIndexOfScalar(u8, line, '\x02') orelse {
@@ -83,8 +93,11 @@ pub fn main_inner() !u8 {
         line = line[0 .. m + line.len - j];
         _ = try output.interface.write(line);
     }
+    try output.interface.flush();
+    std.log.info("Exit log loop", .{});
     proc_ls_stdin.close();
     _ = try proc_ls.wait();
+    std.log.info("Less process closed", .{});
     const term = try proc_gl.wait();
     return term.Exited;
 }

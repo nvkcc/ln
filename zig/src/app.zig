@@ -77,6 +77,12 @@ pub fn less_args(
         try args.append(allocator, num_str);
     }
 
+    if (comptime std.options.log_level == .debug) {
+        for (0..args.items.len) |i| {
+            std.log.debug("less[{d}] = {s}\x1b[m", .{ i, args.items[i] });
+        }
+    }
+
     return args.items;
 }
 
