@@ -15,7 +15,10 @@ pub fn main_inner() !u8 {
     std.log.info("Start execution", .{});
     const app: App = App.init();
 
-    const argv_gl = try app.git_log_args(allocator);
+    const argv_gl = app.git_log_args(allocator) catch {
+        std.debug.print("Failed to get git log args.\n", .{});
+        return 1;
+    };
     if (comptime std.options.log_level == .debug) {
         for (0..argv_gl.len) |i| {
             std.log.debug("[{d}] = {s}\x1b[m", .{ i, argv_gl[i] });
@@ -25,15 +28,28 @@ pub fn main_inner() !u8 {
     // If we're not even in a TTY, then don't bother with a pager.
     if (!app.is_atty) {
         var gl = std.process.Child.init(argv_gl, allocator);
-        try gl.spawn();
-        return (try gl.wait()).Exited;
+        gl.spawn() catch {
+            std.debug.print("Failed to spawn git log.\n", .{});
+            return 1;
+        };
+        const term = gl.wait() catch {
+            std.debug.print("Error while waiting for git log.\n", .{});
+            return 1;
+        };
+        return term.Exited;
     }
 
     // Spawn `less` first to see if it exists.
-    const argv_ls = try app.less_args(allocator);
+    const argv_ls = app.less_args(allocator) catch {
+        std.debug.print("Failed to get less args.\n", .{});
+        return 1;
+    };
     var proc_ls = std.process.Child.init(argv_ls, allocator);
     proc_ls.stdin_behavior = .Pipe;
-    try proc_ls.spawn();
+    proc_ls.spawn() catch {
+        std.debug.print("Failed to spawn less.\n", .{});
+        return 1;
+    };
 
     std.log.info("Just spawned less.", .{});
 
@@ -45,8 +61,14 @@ pub fn main_inner() !u8 {
     proc_ls.waitForSpawn() catch |err| switch (err) {
         error.FileNotFound => {
             std.log.warn("`less` is not installed.\n", .{});
-            try proc_gl.spawn();
-            const term = try proc_gl.wait();
+            proc_gl.spawn() catch {
+                std.debug.print("Failed to spawn git log.\n", .{});
+                return 1;
+            };
+            const term = proc_gl.wait() catch {
+                std.debug.print("Error while waiting for git log.\n", .{});
+                return 1;
+            };
             return term.Exited;
         },
         else => return err,
@@ -54,7 +76,10 @@ pub fn main_inner() !u8 {
     std.log.info("Less spawned okay.", .{});
 
     proc_gl.stdout_behavior = .Pipe;
-    try proc_gl.spawn();
+    proc_gl.spawn() catch {
+        std.debug.print("Failed to spawn git log.\n", .{});
+        return 1;
+    };
 
     // This should be safe because we already set the stdin_behavior above.
     const proc_ls_stdin = proc_ls.stdin orelse unreachable;
@@ -75,7 +100,9 @@ pub fn main_inner() !u8 {
         // Look for the separator character. If none is found, then skip parsing
         // and just print the line to stdout.
         const n = mem.lastIndexOfScalar(u8, line, '\x02') orelse {
-            _ = try output.interface.write(line);
+            _ = output.interface.write(line) catch {
+                break;
+            };
             continue;
         };
         // Unreachable because we expect `git` to at least have one space
@@ -91,9 +118,14 @@ pub fn main_inner() !u8 {
         ) orelse unreachable) + m;
         @memmove(line[m .. m + line.len - j], line[j..]);
         line = line[0 .. m + line.len - j];
-        _ = try output.interface.write(line);
+        _ = output.interface.write(line) catch {
+            break;
+        };
     }
-    try output.interface.flush();
+    output.interface.flush() catch {
+        // All's good. Maybe less just closed early.
+        return 0;
+    };
     std.log.info("Exit log loop", .{});
     proc_ls_stdin.close();
     _ = try proc_ls.wait();
