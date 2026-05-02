@@ -66,7 +66,7 @@ pub fn less_args(
     allocator: mem.Allocator,
 ) error{ OutOfMemory, NoSpaceLeft }![][]const u8 {
     var args: std.ArrayList([]const u8) = try .initCapacity(allocator, 3);
-    args.appendSliceAssumeCapacity(&[_][]const u8{ "less", "-RFG" });
+    args.appendSliceAssumeCapacity(&.{ "less", "-RFG" });
 
     var num_buf: ?[]u8 = null;
     if (self.win_rows) |rows| {
@@ -92,7 +92,7 @@ pub fn git_log_args(
     allocator: mem.Allocator,
 ) error{ OutOfMemory, NoSpaceLeft }![][]const u8 {
     var args: std.ArrayList([]const u8) = try .initCapacity(allocator, 16);
-    args.appendSliceAssumeCapacity(&[_][]const u8{
+    args.appendSliceAssumeCapacity(&.{
         // git options.
         "git",
         "-c",
